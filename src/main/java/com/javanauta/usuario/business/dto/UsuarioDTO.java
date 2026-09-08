@@ -15,6 +15,7 @@ public class UsuarioDTO {
 
     //Não expor dados e transformar em entidades
 
+
     private String nome;
     private String email;
     private String senha;
