@@ -5,7 +5,9 @@ import com.javanauta.usuario.business.converter.UsuarioConverter;
 import com.javanauta.usuario.business.dto.UsuarioDTO;
 import com.javanauta.usuario.infrastructure.entity.Usuario;
 import com.javanauta.usuario.infrastructure.exceptions.ConflictException;
+import com.javanauta.usuario.infrastructure.exceptions.ResourceNotFoundException;
 import com.javanauta.usuario.infrastructure.repository.UsuarioRepository;
+import com.javanauta.usuario.infrastructure.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,9 +22,10 @@ public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final UsuarioConverter usuarioConverter;
     private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
 
 
-    public UsuarioDTO salvaUsuario(UsuarioDTO usuarioDTO){
+    public UsuarioDTO salvaUsuario(UsuarioDTO usuarioDTO) {
         emailExiste(usuarioDTO.getEmail());
         usuarioDTO.setSenha(passwordEncoder.encode(usuarioDTO.getSenha())); // muda a senha e traz ela criptgrafada
         Usuario usuario = usuarioConverter.paraUsuario(usuarioDTO); // dto para entity
@@ -30,10 +33,10 @@ public class UsuarioService {
         return usuarioConverter.paraUsuarioDTO(usuarioRepository.save(usuario)); // transformar a entity em dto
     }
 
-    public void emailExiste(String email){
-        try{
+    public void emailExiste(String email) {
+        try {
             boolean existe = verificaEmailExistente(email);
-            if(existe){
+            if (existe) {
                 throw new ConflictException("Email já cadastrado! " + email);
             }
         } catch (ConflictException e) {
@@ -41,18 +44,37 @@ public class UsuarioService {
         }
     }
 
-    public boolean verificaEmailExistente(String email){ // chamar a funcao na repositorio
+    public boolean verificaEmailExistente(String email) { // chamar a funcao na repositorio
         return usuarioRepository.existsByEmail(email);
     }
 
-   public Usuario buscarUsuarioPorEmail(String email){
+    public Usuario buscarUsuarioPorEmail(String email) {
         return usuarioRepository.findByEmail(email).orElseThrow(
                 () -> new ResolutionException("Email não encontrado!" + email)
         );
-   }
+    }
 
-   public void deletaUsuarioPorEmail(String email) {
+    public void deletaUsuarioPorEmail(String email) {
         usuarioRepository.deleteByEmail(email);
-   }
+    }
+
+    //Ternario e put
+    public UsuarioDTO atualizaDadosUsuario(String token, UsuarioDTO dto) { // verificar se existe, se nao pegar na entity
+        //Aqui buscamos o email do usuario atraves do token (tirar a obrigatoriedade do email)
+        String email = jwtUtil.extrairEmailToken(token.substring(7));
+        //Cripgrafia de senha
+        dto.setSenha(dto.getSenha() != null ? passwordEncoder.encode(dto.getSenha()) : null);
+
+        //Busca os dados do usuario no banco de dados
+        Usuario usuarioEntity = usuarioRepository.findByEmail(email).orElseThrow(() -> // optinal obrigado a colocar elsethrow
+                new ResourceNotFoundException("Email não localizado."));
+
+        //Mesclou os dados que recebemos na requisição DTO com os dados do banco de dados
+        Usuario usuario = usuarioConverter.updateUsuario(dto, usuarioEntity);
+
+        //Salvou os dados do usuario convertido e deppois pegou o retorno e convertou para usuario
+        return usuarioConverter.paraUsuarioDTO(usuarioRepository.save(usuario));
+    }
+
 
 }
